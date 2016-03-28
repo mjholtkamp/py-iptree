@@ -57,7 +57,7 @@ class BaseTree(object):
         """
         prefix = self.prefixes[0]
         node = self.root
-        new_leaf = False
+        new_leaf = None
 
         # find node to which we can add the address, create if it doesn't
         # exist. If node is aggregated, do not create one below it.
@@ -73,24 +73,34 @@ class BaseTree(object):
                 new_node = IPNode(net)
                 node.add(new_node)
                 node = new_node
-                new_leaf = True
+                new_leaf = node
 
         self._hit(node)
         if new_leaf:
             self._update_leaf_count(node, 1)
+            self._leafs_added.append(new_leaf)
 
         aggregated_node = self._check_aggregation(node)
 
-        if new_leaf or aggregated_node != node:
+        if aggregated_node != node:
             self._leafs_added.append(aggregated_node)
+            if new_leaf:
+                # leaf was added, but immediately caused aggregation, so it
+                # got removed as well. Now it's in both list, which is
+                # confusing. Remove from both lists to fix this.
+                for leafs in (self._leafs_added, self._leafs_removed):
+                    idx = leafs.index(new_leaf)
+                    del leafs[idx]
 
         return aggregated_node
 
     def leafs_added(self):
-        return self._leafs_added.pop()
+        while self._leafs_added:
+            yield self._leafs_added.pop()
 
     def leafs_removed(self):
-        return self._leafs_removed.pop()
+        while self._leafs_removed:
+            yield self._leafs_removed.pop()
 
     def _hit(self, node):
         while node:
@@ -119,7 +129,7 @@ class BaseTree(object):
                 # Update leaf count. We removed 'removed_leafs' leafs,
                 # and we added one (parent is converted to leaf because
                 # it lost all its children).
-                self._update_leaf_count(1 - removed_leafs)
+                self._update_leaf_count(parent, 1 - removed_leafs)
                 node = parent
             parent = parent.parent
         return node

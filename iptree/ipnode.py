@@ -41,4 +41,3 @@ class IPNode(object):
             self.children = {}
         else:
             yield self
-

@@ -28,4 +28,3 @@ class TestIPNode(unittest.TestCase):
         assert child.parent is None
         assert child.children == {}
         assert len(leafs) == 2
-
