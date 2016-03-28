@@ -1,7 +1,8 @@
-import pytest
 import unittest
 
-from iptree.iptree import IPTree, IPv4Tree, IPv6Tree, BaseTree
+import pytest
+
+from iptree.iptree import BaseTree, IPTree, IPv4Tree, IPv6Tree
 
 
 class TestIPTree(unittest.TestCase):
@@ -11,8 +12,28 @@ class TestIPTree(unittest.TestCase):
         assert tree.prefixes == (0, 32)
 
     def test_tree_add(self):
-        tree = IPv6Tree()
-        tree.add('2001:db8::1')
+        tree = IPv6Tree(prefixes=(64, 128))
+
+        node = tree.add('2001:db8:cafe::1')
+        node = tree.add('2001:db8:cafe::1')
+        assert node.network == '2001:db8:cafe::1/128'
+        assert node.hit_count == 2
+
+        node = tree.add('2001:db8::1')
+        assert node.network == '2001:db8::1/128'
+        assert node.hit_count == 1
+
+        node = tree.add('2001:db8::2')
+        assert node.network == '2001:db8::2/128'
+        assert node.hit_count == 1
+
+        parent = node.parent
+        assert parent.network == '2001:db8::/64'
+        assert parent.hit_count == 2
+
+        root = parent.parent
+        assert root.network == '::/0'
+        assert root.hit_count == 4
 
     def test_tree_add_invalid(self):
         tree = IPv6Tree()

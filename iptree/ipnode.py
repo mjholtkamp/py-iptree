@@ -15,6 +15,6 @@ class IPNode(object):
     def __getitem__(self, network):
         return self.children[network]
 
-    def __setitem__(self, network, node):
-        self.children[network] = node
-
+    def add(self, node):
+        node.parent = self
+        self.children[node.network] = node

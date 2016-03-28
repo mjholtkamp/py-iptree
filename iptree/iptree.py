@@ -55,10 +55,11 @@ class BaseTree(object):
         """
         prefix = self.prefixes[0]
         node = self.root
+        increase_leaf_count = False
 
         # find node to which we can add the address, create if it doesn't
         # exist. If node is aggregated, do not create one below it.
-        for prefix in self.prefixes[:-1]:
+        for prefix in self.prefixes:
             if node.aggregated:
                 break
 
@@ -68,9 +69,29 @@ class BaseTree(object):
                 node = node[net]
             except KeyError:
                 new_node = IPNode(net)
-                node[net] = new_node
+                node.add(new_node)
                 node = new_node
+                increase_leaf_count = True
 
+        self._increment_hit_count(node)
+        if increase_leaf_count:
+            self._increment_leaf_count(node)
+
+        node = self._aggregate_node(node)
+
+        return node
+
+    def _increment_hit_count(self, node):
+        while node:
+            node.hit_count += 1
+            node = node.parent
+
+    def _increment_leaf_count(self, node):
+        while node.parent:
+            node = node.parent
+            node.leaf_count += 1
+
+    def _aggregate_node(self, node):
         return node
 
 
@@ -89,4 +110,3 @@ class IPTree(object):
         super(IPTree, self).__init__(*args, **kwargs)
         self.ipv4 = IPv4Tree()
         self.ipv6 = IPv6Tree()
-
