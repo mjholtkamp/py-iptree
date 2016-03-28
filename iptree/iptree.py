@@ -44,6 +44,8 @@ class BaseTree(object):
         if prefixes:
             self.prefixes = prefixes
         self.root = IPNode(self.net_all)
+        self._leafs_removed = []
+        self._leafs_added = []
 
     def add(self, address):
         """Add address to tree.
@@ -55,7 +57,7 @@ class BaseTree(object):
         """
         prefix = self.prefixes[0]
         node = self.root
-        increase_leaf_count = False
+        new_leaf = False
 
         # find node to which we can add the address, create if it doesn't
         # exist. If node is aggregated, do not create one below it.
@@ -71,27 +73,55 @@ class BaseTree(object):
                 new_node = IPNode(net)
                 node.add(new_node)
                 node = new_node
-                increase_leaf_count = True
+                new_leaf = True
 
-        self._increment_hit_count(node)
-        if increase_leaf_count:
-            self._increment_leaf_count(node)
+        self._hit(node)
+        if new_leaf:
+            self._update_leaf_count(node, 1)
 
-        node = self._aggregate_node(node)
+        aggregated_node = self._check_aggregation(node)
 
-        return node
+        if new_leaf or aggregated_node != node:
+            self._leafs_added.append(aggregated_node)
 
-    def _increment_hit_count(self, node):
+        return aggregated_node
+
+    def leafs_added(self):
+        return self._leafs_added.pop()
+
+    def leafs_removed(self):
+        return self._leafs_removed.pop()
+
+    def _hit(self, node):
         while node:
             node.hit_count += 1
             node = node.parent
 
-    def _increment_leaf_count(self, node):
+    def _update_leaf_count(self, node, increment):
         while node.parent:
             node = node.parent
-            node.leaf_count += 1
+            node.leaf_count += increment
 
-    def _aggregate_node(self, node):
+    def _check_aggregation(self, node):
+        """Check if node or any of its parents need to be aggregated.
+        We only check from this node and up since this node and its
+        parents are the only ones that changed.
+        :return: current node or aggregated node
+        """
+        parent = node.parent
+
+        while parent:
+            if parent.leaf_count > self.leaf_limit:
+                removed_leafs = 0
+                for leaf in parent.aggregate():
+                    self._leafs_removed.append(leaf)
+                    removed_leafs += 1
+                # Update leaf count. We removed 'removed_leafs' leafs,
+                # and we added one (parent is converted to leaf because
+                # it lost all its children).
+                self._update_leaf_count(1 - removed_leafs)
+                node = parent
+            parent = parent.parent
         return node
 
 

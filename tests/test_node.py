@@ -15,3 +15,17 @@ class TestIPNode(unittest.TestCase):
         node.add(IPNode('::1/128'))
         assert '::1/128' in node
         assert '2001:db8::1/128' not in node
+
+    def test_node_aggregate(self):
+        root = IPNode('::/0')
+        child = IPNode('2001:db8::/32')
+        child.add(IPNode('2001:db8:cafe::1'))
+        child.add(IPNode('2001:db8:cafe::2'))
+        root.add(child)
+        leafs = list(root.aggregate())
+
+        assert root.children == {}
+        assert child.parent is None
+        assert child.children == {}
+        assert len(leafs) == 2
+
