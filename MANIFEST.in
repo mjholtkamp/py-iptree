@@ -1,0 +1,10 @@
+include README.md
+include VERSION
+
+recursive-include tests iptree
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude * *~
+
+recursive-include conf.py Makefile make.bat
+recursive-include requirements *.txt

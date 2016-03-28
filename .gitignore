@@ -1,0 +1,8 @@
+/.cache
+/.coverage
+/coverage.xml
+*.pyc
+__pycache__
+.*.sw?
+/.tox
+/venv
