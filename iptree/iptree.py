@@ -1,14 +1,17 @@
 import ipaddress
+import logging
 
 from .ipnode import IPNode
 
 
+logger = logging.getLogger('iptree')
+
+
 class BaseTree(object):
     net_all = None
-    prefixes = None
-    leaf_limit = 1000
+    prefix_limits = None
 
-    def __init__(self, net_all=None, prefixes=None, *args, **kwargs):
+    def __init__(self, net_all=None, prefix_limits=None, *args, **kwargs):
         """Tree of IPNode objects.
         The Tree uses prefix length to group ip address in (tree) nodes. To
         prevent out-of-memory errors, nodes are automatically aggregated once
@@ -18,31 +21,28 @@ class BaseTree(object):
         range and a large group of network ranges are aggregated into a bigger
         network range.
 
-        The prefixes determine how the addresses/network ranges are grouped.
-        For example, suppose leaf_limit is 10 and prefixes is (32, 64, 128).
+        The prefix_limits determine how the addresses/network ranges are grouped.
+        For example, prefix_limits is ((32, 100), (64, 10), (128, 0)).
         If there are more than 10 addresses (/128), they will be grouped into
         the next prefix of a larger network (/64). Now instead of 10+ leafs
         (the 10+ addresses with the /128 prefix), there is only 1 leaf (the
-        network range with the prefix /64). If there are 10+ /64 network ranges
+        network range with the prefix /64). If there are 100+ /64 network ranges
         in the /32 network range, they will be aggregated into the /32 range
         as well.
 
-        In the above example, if there are 5 /128 addresses under one /64 range
-        and 6 /128 addresses under another /64 range, while both are under the
-        same /32 range, they will be aggregated immediately into the /32. This
-        might seem scary, but remember that the leaf count will be 1 if they
-        are aggregated so it will not aggregated further up. The default list
-        of prefixes has very short steps between each prefix, so aggregation
-        is not that fast.
+        In the above example, if there are 9 /128 addresses each under 12 different
+        /64 ranges, there will not be 10+ per /64 so they will not be grouped under
+        the /64 range, but the 9 * 12 addresses = 108 addresses. This is larger
+        than the leaf_limit for the /32, so they will be grouped under the /32.
 
         Whenever addresses/networks are aggregated, information about specific
         address/networks are lost, but the total hit_count is preserved.
         """
-        super(BaseTree, self).__init__(*args, **kwargs)
+        super(BaseTree, self).__init__()
         if net_all:
             self.net_all = net_all
-        if prefixes:
-            self.prefixes = prefixes
+        if prefix_limits:
+            self.prefix_limits = prefix_limits
         self.root = IPNode(self.net_all)
         self._leafs_removed = []
         self._leafs_added = []
@@ -55,13 +55,13 @@ class BaseTree(object):
 
         :return: Node that address was added too. Can be aggregated node.
         """
-        prefix = self.prefixes[0]
+        prefix = self.prefix_limits[0]
         node = self.root
         new_leaf = None
 
         # find node to which we can add the address, create if it doesn't
         # exist. If node is aggregated, do not create one below it.
-        for prefix in self.prefixes:
+        for prefix, leaf_limit in self.prefix_limits:
             if node.aggregated:
                 break
 
@@ -74,6 +74,7 @@ class BaseTree(object):
                 node.add(new_node)
                 node = new_node
                 new_leaf = node
+                logger.info('added node: {}'.format(new_leaf.network))
 
         self._hit(node)
         if new_leaf:
@@ -89,6 +90,7 @@ class BaseTree(object):
                 # got removed as well. Now it's in both list, which is
                 # confusing. Remove from both lists to fix this.
                 for leafs in (self._leafs_added, self._leafs_removed):
+                    logger.info('delete added node: {}'.format(new_leaf.network))
                     idx = leafs.index(new_leaf)
                     del leafs[idx]
 
@@ -110,6 +112,9 @@ class BaseTree(object):
     def _update_leaf_count(self, node, increment):
         while node.parent:
             node = node.parent
+            logger.debug('node: {} old leaf_count: {} new leaf count: {}'.format(
+                node.network, node.leaf_count, node.leaf_count + increment
+            ))
             node.leaf_count += increment
 
     def _check_aggregation(self, node):
@@ -120,11 +125,23 @@ class BaseTree(object):
         """
         parent = node.parent
 
-        while parent:
-            if parent.leaf_count > self.leaf_limit:
+        node_prefix = int(node.network.split('/')[1])
+        prefix_idx = -1
+        for idx, (prefix, _) in enumerate(self.prefix_limits):
+            if prefix == node_prefix:
+                prefix_idx = idx - 1
+                break
+
+        while prefix_idx >= 0:
+            prefix, leaf_limit = self.prefix_limits[prefix_idx]
+            if leaf_limit > 0 and parent.leaf_count > leaf_limit:
+                logger.info('prefix limit exceeded: {} leaf_count: {} leaf_limit: {}'.format(
+                    prefix, parent.leaf_count, leaf_limit
+                ))
                 removed_leafs = 0
                 for leaf in parent.aggregate():
                     self._leafs_removed.append(leaf)
+                    logger.info('node removed: {}'.format(leaf.network))
                     removed_leafs += 1
                 # Update leaf count. We removed 'removed_leafs' leafs,
                 # and we added one (parent is converted to leaf because
@@ -132,17 +149,31 @@ class BaseTree(object):
                 self._update_leaf_count(parent, 1 - removed_leafs)
                 node = parent
             parent = parent.parent
+            prefix_idx -= 1
         return node
 
 
 class IPv4Tree(BaseTree):
     net_all = '0.0.0.0/0'
-    prefixes = (16, 24, 32)
+    prefix_limits = (
+        (16, -1),
+        (24, 16),
+        (32, 0),
+    )
 
 
 class IPv6Tree(BaseTree):
     net_all = '::/0'
-    prefixes = (32, 48, 56, 64, 80, 96, 112, 128)
+    prefix_limits = (
+        (32, -1),
+        (48, 50),
+        (56, 10),
+        (64, 5),
+        (80, 4),
+        (96, 3),
+        (112, 2),
+        (128, 0),
+    )
 
 
 class IPTree(object):

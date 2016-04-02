@@ -15,6 +15,17 @@ class IPNode(object):
     def __getitem__(self, network):
         return self.children[network]
 
+    def __iter__(self):
+        if self.children:
+            for child in self.children.values():
+                for grandchild in iter(child):
+                    yield grandchild
+
+            # done, unlink the children
+            self.children = {}
+        else:
+            yield self
+
     def add(self, node):
         node.parent = self
         self.children[node.network] = node
