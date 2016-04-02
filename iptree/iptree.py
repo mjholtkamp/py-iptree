@@ -1,8 +1,8 @@
-import ipaddress
 import logging
 
-from .ipnode import IPNode
+import ipaddress
 
+from .ipnode import IPNode
 
 logger = logging.getLogger('iptree')
 
@@ -21,19 +21,20 @@ class BaseTree(object):
         range and a large group of network ranges are aggregated into a bigger
         network range.
 
-        The prefix_limits determine how the addresses/network ranges are grouped.
-        For example, prefix_limits is ((32, 100), (64, 10), (128, 0)).
-        If there are more than 10 addresses (/128), they will be grouped into
-        the next prefix of a larger network (/64). Now instead of 10+ leafs
-        (the 10+ addresses with the /128 prefix), there is only 1 leaf (the
-        network range with the prefix /64). If there are 100+ /64 network ranges
-        in the /32 network range, they will be aggregated into the /32 range
-        as well.
+        The prefix_limits determine how the addresses/network ranges are
+        grouped.  For example, prefix_limits is ((32, 100), (64, 10), (128,
+        0)).  If there are more than 10 addresses (/128), they will be grouped
+        into the next prefix of a larger network (/64). Now instead of 10+
+        leafs (the 10+ addresses with the /128 prefix), there is only 1 leaf
+        (the network range with the prefix /64). If there are 100+ /64 network
+        ranges in the /32 network range, they will be aggregated into the /32
+        range as well.
 
-        In the above example, if there are 9 /128 addresses each under 12 different
-        /64 ranges, there will not be 10+ per /64 so they will not be grouped under
-        the /64 range, but the 9 * 12 addresses = 108 addresses. This is larger
-        than the leaf_limit for the /32, so they will be grouped under the /32.
+        In the above example, if there are 9 /128 addresses each under 12
+        different /64 ranges, there will not be 10+ per /64 so they will not be
+        grouped under the /64 range, but the 9 * 12 addresses = 108 addresses.
+        This is larger than the leaf_limit for the /32, so they will be grouped
+        under the /32.
 
         Whenever addresses/networks are aggregated, information about specific
         address/networks are lost, but the total hit_count is preserved.
@@ -90,7 +91,9 @@ class BaseTree(object):
                 # got removed as well. Now it's in both list, which is
                 # confusing. Remove from both lists to fix this.
                 for leafs in (self._leafs_added, self._leafs_removed):
-                    logger.info('delete added node: {}'.format(new_leaf.network))
+                    logger.info('delete added node: {}'.format(
+                        new_leaf.network
+                    ))
                     idx = leafs.index(new_leaf)
                     del leafs[idx]
 
@@ -112,9 +115,11 @@ class BaseTree(object):
     def _update_leaf_count(self, node, increment):
         while node.parent:
             node = node.parent
-            logger.debug('node: {} old leaf_count: {} new leaf count: {}'.format(
-                node.network, node.leaf_count, node.leaf_count + increment
-            ))
+            logger.debug(
+                'node: {} old leaf_count: {} new leaf count: {}'.format(
+                    node.network, node.leaf_count, node.leaf_count + increment
+                )
+            )
             node.leaf_count += increment
 
     def _check_aggregation(self, node):
@@ -135,9 +140,10 @@ class BaseTree(object):
         while prefix_idx >= 0:
             prefix, leaf_limit = self.prefix_limits[prefix_idx]
             if leaf_limit > 0 and parent.leaf_count > leaf_limit:
-                logger.info('prefix limit exceeded: {} leaf_count: {} leaf_limit: {}'.format(
-                    prefix, parent.leaf_count, leaf_limit
-                ))
+                logger.info(
+                    'prefix limit exceeded: {} leaf_count: {} leaf_limit: {}'
+                    .format(prefix, parent.leaf_count, leaf_limit)
+                )
                 removed_leafs = 0
                 for leaf in parent.aggregate():
                     self._leafs_removed.append(leaf)

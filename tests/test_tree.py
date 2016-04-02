@@ -7,7 +7,10 @@ from iptree.iptree import BaseTree, IPTree, IPv4Tree, IPv6Tree
 
 class TestIPTree(unittest.TestCase):
     def test_tree_base(self):
-        tree = BaseTree(net_all='127.0.0.1/32', prefix_limits=((32, -1), (64, 2)))
+        tree = BaseTree(
+            net_all='127.0.0.1/32',
+            prefix_limits=((32, -1), (64, 2)),
+        )
         assert tree.net_all == '127.0.0.1/32'
         assert tree.prefix_limits == ((32, -1), (64, 2))
 

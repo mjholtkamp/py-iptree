@@ -2,10 +2,7 @@ import logging
 import os
 import random
 
-import pytest
-
-from iptree.iptree import BaseTree, IPTree, IPv4Tree, IPv6Tree
-
+from iptree.iptree import IPv6Tree
 
 if os.environ.get('IPTREE_DEBUG'):
     logger = logging.getLogger('iptree')
@@ -48,6 +45,7 @@ class RandomIPv6(object):
                 for x in range(self.parts)
             ]
             yield self.ip_fmt.format(*octets)
+
 
 class TestRandomIPv6(object):
     def test_ip_32(self):
@@ -306,4 +304,3 @@ class TestIPTree(object):
         assert tree.root.leaf_count == 1
         assert len(self.leafs_removed) == 50
         assert len(self.leafs_added) == 51
-
