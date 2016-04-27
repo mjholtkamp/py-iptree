@@ -28,3 +28,11 @@ class TestIPNode(unittest.TestCase):
         assert child.parent is None
         assert child.children == {}
         assert len(leafs) == 2
+
+    def test_node_iter_does_not_empty(self):
+        root = IPNode('::/0')
+        root.add(IPNode('2001:db8::1'))
+
+        assert [x.network for x in root] == ['2001:db8::1']
+        # repeat to show that __iter__ does not empty children
+        assert [x.network for x in root] == ['2001:db8::1']

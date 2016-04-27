@@ -20,9 +20,6 @@ class IPNode(object):
             for child in self.children.values():
                 for grandchild in iter(child):
                     yield grandchild
-
-            # done, unlink the children
-            self.children = {}
         else:
             yield self
 
