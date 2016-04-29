@@ -93,9 +93,10 @@ class TestIPTree(object):
         ]
 
     def add_ip(self, tree, ip):
-        tree.add(ip)
+        node = tree.add(ip)
         self.leafs_removed.extend([x.network for x in tree.leafs_removed()])
         self.leafs_added.extend([x.network for x in tree.leafs_added()])
+        return node
 
     def test_add_from_one_128(self):
         tree = IPv6Tree()
@@ -304,3 +305,22 @@ class TestIPTree(object):
         assert tree.root.leaf_count == 1
         assert len(self.leafs_removed) == 50
         assert len(self.leafs_added) == 51
+
+    def test_user_data(self):
+        def aggregate_user_data(into, from_):
+            """Our custome aggregate function to test the calling
+            of the aggregate function. It simply sums up all counters."""
+            into.data['counter'] += sum([x.data['counter'] for x in from_])
+
+        kwargs = dict(
+            aggregate_user_data=aggregate_user_data,
+            initial_user_data={'counter': 0},
+        )
+        tree = IPv6Tree(**kwargs)
+        for prefix in self.generate_addresses(112, 100, 1):
+            for ip in prefix:
+                node = self.add_ip(tree, ip)
+                node.data['counter'] += 2
+
+        children = [x for x in tree.root]
+        assert children[0].data['counter'] == 200

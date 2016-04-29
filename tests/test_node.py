@@ -36,3 +36,10 @@ class TestIPNode(unittest.TestCase):
         assert [x.network for x in root] == ['2001:db8::1']
         # repeat to show that __iter__ does not empty children
         assert [x.network for x in root] == ['2001:db8::1']
+
+    def test_user_data(self):
+        data = {
+            'user': 'data',
+        }
+        root = IPNode('::/0', data=data)
+        assert root.data['user'] == 'data'

@@ -7,11 +7,21 @@ from .ipnode import IPNode
 logger = logging.getLogger('iptree')
 
 
+def default_aggregate_user_data(into, from_):
+    """Default no-op aggregate_user_data
+    :param into: the aggregated node
+    :param from_: the list of nodes to be aggregated
+    """
+    pass
+
+
 class BaseTree(object):
     net_all = None
     prefix_limits = None
 
-    def __init__(self, net_all=None, prefix_limits=None, *args, **kwargs):
+    def __init__(
+            self, net_all=None, prefix_limits=None, aggregate_user_data=None,
+            initial_user_data=None, *args, **kwargs):
         """Tree of IPNode objects.
         The Tree uses prefix length to group ip address in (tree) nodes. To
         prevent out-of-memory errors, nodes are automatically aggregated once
@@ -38,15 +48,33 @@ class BaseTree(object):
 
         Whenever addresses/networks are aggregated, information about specific
         address/networks are lost, but the total hit_count is preserved.
+
+        It is possible to store and aggregate custom data as well. Each node
+        has a 'data' attribute, which can be anything. Use 'initial_user_data'
+        to initialize each node with. The 'aggregate_user_data' method will
+        be called each time nodes are aggregated. For usage, see the method
+        default_aggregate_user_data.
         """
         super(BaseTree, self).__init__()
         if net_all:
             self.net_all = net_all
         if prefix_limits:
             self.prefix_limits = prefix_limits
-        self.root = IPNode(self.net_all)
+        self._initial_user_data = initial_user_data
+        self.root = IPNode(self.net_all, data=self.new_user_data())
         self._leafs_removed = []
         self._leafs_added = []
+
+        if not aggregate_user_data:
+            aggregate_user_data = default_aggregate_user_data
+
+        self.aggregate_user_data = aggregate_user_data
+
+    def new_user_data(self):
+        if not self._initial_user_data:
+            return None
+
+        return self._initial_user_data.copy()
 
     def add(self, address):
         """Add address to tree.
@@ -71,7 +99,7 @@ class BaseTree(object):
             try:
                 node = node[net]
             except KeyError:
-                new_node = IPNode(net)
+                new_node = IPNode(net, data=self.new_user_data())
                 node.add(new_node)
                 node = new_node
                 new_leaf = node
@@ -144,15 +172,18 @@ class BaseTree(object):
                     'prefix limit exceeded: {} leaf_count: {} leaf_limit: {}'
                     .format(prefix, parent.leaf_count, leaf_limit)
                 )
-                removed_leafs = 0
+                leafs_removed = []
                 for leaf in parent.aggregate():
-                    self._leafs_removed.append(leaf)
+                    leafs_removed.append(leaf)
                     logger.info('node removed: {}'.format(leaf.network))
-                    removed_leafs += 1
-                # Update leaf count. We removed 'removed_leafs' leafs,
+
+                self.aggregate_user_data(parent, leafs_removed)
+                self._leafs_removed.extend(leafs_removed)
+
+                # Update leaf count. We removed N leafs,
                 # and we added one (parent is converted to leaf because
                 # it lost all its children).
-                self._update_leaf_count(parent, 1 - removed_leafs)
+                self._update_leaf_count(parent, 1 - len(leafs_removed))
                 node = parent
             parent = parent.parent
             prefix_idx -= 1

@@ -67,3 +67,13 @@ class TestIPTree(unittest.TestCase):
 
         node = tree.add(address)
         assert node.network == '2001:db8::/112'
+
+    def test_initial_data(self):
+        tree = IPv6Tree(initial_user_data={'initial': 'd'})
+        assert tree.root.data['initial'] == 'd'
+        tree.root.data['initial'] = 'data'
+        assert tree.root.data['initial'] == 'data'
+
+        # make sure changing one, will not affect new nodes
+        node = tree.add('2001:db8::1')
+        assert node.data['initial'] == 'd'
