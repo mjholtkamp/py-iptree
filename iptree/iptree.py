@@ -7,6 +7,13 @@ from .ipnode import IPNode
 logger = logging.getLogger('iptree')
 
 
+class RemoveRootException(Exception):
+    pass
+
+class RemoveNonLeafException(Exception):
+    pass
+
+
 def default_aggregate_user_data(into, from_):
     """Default no-op aggregate_user_data
     :param into: the aggregated node
@@ -128,12 +135,23 @@ class BaseTree(object):
         return aggregated_node
 
     def leafs_added(self):
+        """Leafs added"""
         while self._leafs_added:
             yield self._leafs_added.pop()
 
     def leafs_removed(self):
+        """Leafs removed due to aggregation"""
         while self._leafs_removed:
             yield self._leafs_removed.pop()
+
+    def remove(self, node):
+        if node.children:
+            raise RemoveNonLeafException('Not a leaf node')
+
+        if not node.parent:
+            raise RemoveRootException("Can't remove root node")
+
+        del node.parent.children[node.network]
 
     def _hit(self, node):
         while node:
