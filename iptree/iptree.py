@@ -134,6 +134,12 @@ class BaseTree(object):
 
         return aggregated_node
 
+    def leafs(self):
+        """
+        Returns a generator that will yield all leafs (not intermediate) nodes
+        """
+        return (x for x in self.root)
+
     def leafs_added(self):
         """Leafs added"""
         while self._leafs_added:
@@ -233,6 +239,25 @@ class IPv6Tree(BaseTree):
 
 class IPTree(object):
     def __init__(self, *args, **kwargs):
-        super(IPTree, self).__init__(*args, **kwargs)
-        self.ipv4 = IPv4Tree()
-        self.ipv6 = IPv6Tree()
+        super(IPTree, self).__init__()
+        self.ipv4 = IPv4Tree(*args, **kwargs)
+        self.ipv6 = IPv6Tree(*args, **kwargs)
+
+    def _tree_by_network(self, network):
+        if ':' in network:
+            return self.ipv6
+        return self.ipv4
+
+    def leafs(self):
+        for leaf in self.ipv6.leafs():
+            yield leaf
+
+        for leaf in self.ipv4.leafs():
+            yield leaf
+
+    def add(self, network):
+        return self._tree_by_network(network).add(network)
+
+    def remove(self, node):
+        self._tree_by_network(node.network).remove(node)
+

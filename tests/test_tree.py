@@ -27,12 +27,22 @@ class TestIPTree(unittest.TestCase):
 
     def test_tree(self):
         tree = IPTree()
-        assert tree is not None
+
+        assert '0.0.0.0/0' in [x.network for x in tree.leafs()]
+        assert '::/0' in [x.network for x in tree.leafs()]
+
+        tree.add('127.0.0.1')
+        tree.add('2001:db8::1')
+
+        assert '127.0.0.1/32' in [x.network for x in tree.leafs()]
+        assert '2001:db8::1/128' in [x.network for x in tree.leafs()]
+
+        assert len(list(tree.leafs())) == 2
 
 
 class TestAdd(unittest.TestCase):
     def test_tree_add(self):
-        tree = IPv6Tree()
+        tree = IPTree()
 
         node = tree.add('2001:db8:cafe::1')
         node = tree.add('2001:db8:cafe::1')
@@ -51,16 +61,19 @@ class TestAdd(unittest.TestCase):
         assert parent.network == '2001:db8::/112'
         assert parent.hit_count == 2
 
-        assert tree.root.network == '::/0'
-        assert tree.root.hit_count == 4
+        assert tree.ipv6.root.network == '::/0'
+        assert tree.ipv6.root.hit_count == 4
 
     def test_tree_add_invalid(self):
-        tree = IPv6Tree()
+        tree = IPTree()
         with pytest.raises(ValueError):
             tree.add('2001::db8::1')
 
+        with pytest.raises(ValueError):
+            tree.add('127.0.0.0.1')
+
     def test_append_aggregated(self):
-        tree = IPv6Tree()
+        tree = IPTree()
 
         for x in range(3):
             address = u'2001:db8::{}'.format(x)
@@ -76,30 +89,34 @@ class TestAdd(unittest.TestCase):
 
 class TestRemove(unittest.TestCase):
     def test_tree_remove(self):
-        tree = IPv6Tree()
+        tree = IPTree()
 
         node = tree.add('2001:db8:cafe::1')
         assert node.network == '2001:db8:cafe::1/128'
         node = tree.add('2001:db8:cafe::2')
         assert node.network == '2001:db8:cafe::2/128'
 
-        leafs = [x.network for x in tree.root]
-        assert len(leafs) == 2
+        leafs = [x.network for x in tree.leafs()]
+        assert len(leafs) == 3
 
         tree.remove(node)
 
-        leafs = [x.network for x in tree.root]
-        assert len(leafs) == 1
-        assert leafs[0] == '2001:db8:cafe::1/128'
+        leafs = [x.network for x in tree.leafs()]
+        assert len(leafs) == 2
+        assert '2001:db8:cafe::1/128' in leafs
 
     def test_tree_remove_root(self):
-        tree = IPv6Tree()
+        tree = IPTree()
 
-        leafs = [x for x in tree.root]
-        assert len(leafs) == 1
+        leafs = [x for x in tree.leafs()]
+        assert len(leafs) == 2
 
+        # both IPv4 and IPv6 are root nodes (as well as leaves)
         with pytest.raises(RemoveRootException):
             tree.remove(leafs[0])
+
+        with pytest.raises(RemoveRootException):
+            tree.remove(leafs[1])
 
     def test_tree_remove_non_leaf(self):
         """Test if non leafs can't be removed.
@@ -116,25 +133,30 @@ class TestRemove(unittest.TestCase):
                       `-2001:db8:cafe::1/128
 
         """
-        tree = IPv6Tree()
+        tree = IPTree()
 
-        assert len([x for x in tree.root]) == 1
+        # two leafs; one for IPv4, one for IPv6
+        assert len([x for x in tree.leafs()]) == 2
 
         tree.add('2001:db8:cafe::1')
 
+        # still to leafs, the IPv6 one is not '::/0' anymore
+        assert len([x for x in tree.leafs()]) == 2
+
         with pytest.raises(RemoveNonLeafException):
             # 2001:db8::/32 is not a leaf
-            tree.remove(tree.root.children['2001:db8::/32'])
+            tree.remove(tree.ipv6.root.children['2001:db8::/32'])
 
-        assert len([x for x in tree.root]) == 1
+        assert len([x for x in tree.leafs()]) == 2
 
 
 class TestInitial(unittest.TestCase):
     def test_initial_data(self):
-        tree = IPv6Tree(initial_user_data={'initial': 'd'})
-        assert tree.root.data['initial'] == 'd'
-        tree.root.data['initial'] = 'data'
-        assert tree.root.data['initial'] == 'data'
+        tree = IPTree(initial_user_data={'initial': 'd'})
+        assert tree.ipv4.root.data['initial'] == 'd'
+        assert tree.ipv6.root.data['initial'] == 'd'
+        tree.ipv6.root.data['initial'] = 'data'
+        assert tree.ipv6.root.data['initial'] == 'data'
 
         # make sure changing one, will not affect new nodes
         node = tree.add('2001:db8::1')
