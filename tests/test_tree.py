@@ -3,9 +3,13 @@ import unittest
 import pytest
 
 from iptree.iptree import (
-    BaseTree, IPTree, IPv4Tree, IPv6Tree, RemoveRootException,
-    RemoveNonLeafException,
+    BaseTree, IPTree, IPv4Tree, IPv6Tree, RemoveNonLeafException,
+    RemoveRootException,
 )
+
+from . import debug
+
+debug.init()
 
 
 class TestIPTree(unittest.TestCase):
@@ -44,20 +48,20 @@ class TestAdd(unittest.TestCase):
     def test_tree_add(self):
         tree = IPTree()
 
-        node = tree.add('2001:db8:cafe::1')
-        node = tree.add('2001:db8:cafe::1')
-        assert node.network == '2001:db8:cafe::1/128'
-        assert node.hit_count == 2
+        tree.add('2001:db8:cafe::1')
+        hit = tree.add('2001:db8:cafe::1')
+        assert hit.node.network == '2001:db8:cafe::1/128'
+        assert hit.node.hit_count == 2
 
-        node = tree.add('2001:db8::1')
-        assert node.network == '2001:db8::1/128'
-        assert node.hit_count == 1
+        hit = tree.add('2001:db8::1')
+        assert hit.node.network == '2001:db8::1/128'
+        assert hit.node.hit_count == 1
 
-        node = tree.add('2001:db8::2')
-        assert node.network == '2001:db8::2/128'
-        assert node.hit_count == 1
+        hit = tree.add('2001:db8::2')
+        assert hit.node.network == '2001:db8::2/128'
+        assert hit.node.hit_count == 1
 
-        parent = node.parent
+        parent = hit.node.parent
         assert parent.network == '2001:db8::/112'
         assert parent.hit_count == 2
 
@@ -80,26 +84,26 @@ class TestAdd(unittest.TestCase):
             tree.add(address)
 
         address = u'2001:db8::1234'
-        node = tree.add(address)
-        assert node.network == '2001:db8::/112'
+        hit = tree.add(address)
+        assert hit.node.network == '2001:db8::/112'
 
-        node = tree.add(address)
-        assert node.network == '2001:db8::/112'
+        hit = tree.add(address)
+        assert hit.node.network == '2001:db8::/112'
 
 
 class TestRemove(unittest.TestCase):
     def test_tree_remove(self):
         tree = IPTree()
 
-        node = tree.add('2001:db8:cafe::1')
-        assert node.network == '2001:db8:cafe::1/128'
-        node = tree.add('2001:db8:cafe::2')
-        assert node.network == '2001:db8:cafe::2/128'
+        hit = tree.add('2001:db8:cafe::1')
+        assert hit.node.network == '2001:db8:cafe::1/128'
+        hit = tree.add('2001:db8:cafe::2')
+        assert hit.node.network == '2001:db8:cafe::2/128'
 
         leafs = [x.network for x in tree.leafs()]
         assert len(leafs) == 3
 
-        tree.remove(node)
+        tree.remove(hit.node)
 
         leafs = [x.network for x in tree.leafs()]
         assert len(leafs) == 2
@@ -159,5 +163,5 @@ class TestInitial(unittest.TestCase):
         assert tree.ipv6.root.data['initial'] == 'data'
 
         # make sure changing one, will not affect new nodes
-        node = tree.add('2001:db8::1')
-        assert node.data['initial'] == 'd'
+        hit = tree.add('2001:db8::1')
+        assert hit.node.data['initial'] == 'd'

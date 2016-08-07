@@ -1,4 +1,5 @@
 import logging
+from collections import namedtuple
 
 import ipaddress
 
@@ -10,8 +11,16 @@ logger = logging.getLogger('iptree')
 class RemoveRootException(Exception):
     pass
 
+
 class RemoveNonLeafException(Exception):
     pass
+
+
+class NodeNotFound(Exception):
+    pass
+
+
+Hit = namedtuple('Hit', ['node', 'leafs_removed', 'leafs_added'])
 
 
 def default_aggregate_user_data(into, from_):
@@ -69,8 +78,6 @@ class BaseTree(object):
             self.prefix_limits = prefix_limits
         self._initial_user_data = initial_user_data
         self.root = IPNode(self.net_all, data=self.new_user_data())
-        self._leafs_removed = []
-        self._leafs_added = []
 
         if not aggregate_user_data:
             aggregate_user_data = default_aggregate_user_data
@@ -83,72 +90,100 @@ class BaseTree(object):
 
         return self._initial_user_data.copy()
 
-    def add(self, address):
-        """Add address to tree.
-        The address is added to the tree, unless an aggregated node already
-        exists of a network that matches the address. In both cases, the
-        hit_count for the node is increased and the node is returned.
-
-        :return: Node that address was added too. Can be aggregated node.
-        """
-        prefix = self.prefix_limits[0]
-        node = self.root
-        new_leaf = None
-
-        # find node to which we can add the address, create if it doesn't
-        # exist. If node is aggregated, do not create one below it.
+    def _networks(self, address):
+        """Generate networks for each of the prefixes, specific to address"""
         for prefix, leaf_limit in self.prefix_limits:
-            if node.aggregated:
+            current_network = u'{}/{}'.format(address, prefix)
+            yield str(ipaddress.ip_network(current_network, strict=False))
+
+    def find_node(self, address):
+        node = self.root
+        for net in self._networks(address):
+            if node.aggregated or node.network == address:
                 break
 
-            current_network = u'{}/{}'.format(address, prefix)
-            net = str(ipaddress.ip_network(current_network, strict=False))
             try:
                 node = node[net]
             except KeyError:
+                raise NodeNotFound
+
+        return node
+
+    def create_node(self, address):
+        """Create node if it doesn't exist yet"""
+        node = self.root
+        new_leaf = False
+
+        for net in self._networks(address):
+            if node.aggregated:
+                break
+
+            try:
+                node = node[net]
+            except KeyError:
+                new_leaf = True
                 new_node = IPNode(net, data=self.new_user_data())
                 node.add(new_node)
                 node = new_node
-                new_leaf = node
-                logger.info('added node: {}'.format(new_leaf.network))
+                logger.info('added node: {}'.format(node.network))
 
-        self._hit(node)
         if new_leaf:
             self._update_leaf_count(node, 1)
-            self._leafs_added.append(new_leaf)
+            logger.info('node {} is a leaf'.format(node.network))
 
-        aggregated_node = self._check_aggregation(node)
+        return node
 
-        if aggregated_node != node:
-            self._leafs_added.append(aggregated_node)
-            if new_leaf:
-                # leaf was added, but immediately caused aggregation, so it
-                # got removed as well. Now it's in both list, which is
-                # confusing. Remove from both lists to fix this.
-                for leafs in (self._leafs_added, self._leafs_removed):
-                    logger.info('delete added node: {}'.format(
-                        new_leaf.network
-                    ))
-                    idx = leafs.index(new_leaf)
-                    del leafs[idx]
+    def add(self, address):
+        """Add a hit to an address.
 
-        return aggregated_node
+        If there is no node in the tree yet that represents the address,
+        a node is created. An aggregate node represents the address if
+        the subnets are the same (with equal prefix lengths).
+
+        The hit_count for the node is increased and the node is returned.
+
+        The affected nodes are also checked for leaf limits, so it could
+        be that nodes will be aggregated because of this call. In that case,
+        leafs_added and leafs_removed are updated accordingly.
+
+        :return: Hit(node, leafs_removed, leafs_added)
+                 Where node is the IPNode where the hit was registered,
+                 leafs_removed is a list of nodes that were removed since
+                 before this call and leafs_added is a list of nodes that
+                 were added since before this call.
+        """
+        new_leaf = False
+        try:
+            node = self.find_node(address)
+        except NodeNotFound:
+            node = self.create_node(address)
+            new_leaf = True
+
+        self._hit(node)
+
+        leafs_added = []
+        aggregated_node, leafs_removed = self._aggregate_if_needed(node)
+
+        if new_leaf:
+            if leafs_removed:
+                # some leafs were removed, so also the one we just added.
+                # remove it from the leafs_removed list
+                leafs_removed.remove(node)
+                logger.info(
+                    'Unmarked as removed/not marking as added: {}'
+                    .format(node.network)
+                )
+
+            leafs_added.append(aggregated_node)
+            logger.info('Marking as added: {}'.format(aggregated_node.network))
+
+        return Hit(aggregated_node, leafs_removed, leafs_added)
 
     def leafs(self):
         """
         Returns a generator that will yield all leafs (not intermediate) nodes
         """
         return (x for x in self.root)
-
-    def leafs_added(self):
-        """Leafs added"""
-        while self._leafs_added:
-            yield self._leafs_added.pop()
-
-    def leafs_removed(self):
-        """Leafs removed due to aggregation"""
-        while self._leafs_removed:
-            yield self._leafs_removed.pop()
 
     def remove(self, node):
         if node.children:
@@ -174,12 +209,15 @@ class BaseTree(object):
             )
             node.leaf_count += increment
 
-    def _check_aggregation(self, node):
+    def _aggregate_if_needed(self, node):
         """Check if node or any of its parents need to be aggregated.
         We only check from this node and up since this node and its
         parents are the only ones that changed.
-        :return: current node or aggregated node
+        :return: tuple of (node, leafs_removed) where node is current
+                 node or aggregated node and leafs_removed is a list
+                 if nodes that are removed because of aggregation.
         """
+        total_leafs_removed = []
         parent = node.parent
 
         node_prefix = int(node.network.split('/')[1])
@@ -194,7 +232,7 @@ class BaseTree(object):
             if leaf_limit > 0 and parent.leaf_count > leaf_limit:
                 logger.info(
                     'prefix limit exceeded: {} leaf_count: {} leaf_limit: {}'
-                    .format(prefix, parent.leaf_count, leaf_limit)
+                    .format(parent.network, parent.leaf_count, leaf_limit)
                 )
                 leafs_removed = []
                 for leaf in parent.aggregate():
@@ -202,7 +240,7 @@ class BaseTree(object):
                     logger.info('node removed: {}'.format(leaf.network))
 
                 self.aggregate_user_data(parent, leafs_removed)
-                self._leafs_removed.extend(leafs_removed)
+                total_leafs_removed.extend(leafs_removed)
 
                 # Update leaf count. We removed N leafs,
                 # and we added one (parent is converted to leaf because
@@ -211,13 +249,13 @@ class BaseTree(object):
                 node = parent
             parent = parent.parent
             prefix_idx -= 1
-        return node
+        return node, total_leafs_removed
 
 
 class IPv4Tree(BaseTree):
     net_all = '0.0.0.0/0'
     prefix_limits = (
-        (16, -1),
+        (16, 0),
         (24, 16),
         (32, 0),
     )
@@ -226,7 +264,7 @@ class IPv4Tree(BaseTree):
 class IPv6Tree(BaseTree):
     net_all = '::/0'
     prefix_limits = (
-        (32, -1),
+        (32, 0),
         (48, 50),
         (56, 10),
         (64, 5),
@@ -260,4 +298,3 @@ class IPTree(object):
 
     def remove(self, node):
         self._tree_by_network(node.network).remove(node)
-

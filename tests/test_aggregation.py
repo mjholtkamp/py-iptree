@@ -1,16 +1,10 @@
-import logging
-import os
 import random
 
 from iptree.iptree import IPv6Tree
 
-if os.environ.get('IPTREE_DEBUG'):
-    logger = logging.getLogger('iptree')
-    logger.setLevel(logging.INFO)
+from . import debug
 
-    console = logging.StreamHandler()
-    console.setLevel(logging.DEBUG)
-    logger.addHandler(console)
+debug.init()
 
 
 class RandomIPv6(object):
@@ -93,10 +87,10 @@ class TestIPTree(object):
         ]
 
     def add_ip(self, tree, ip):
-        node = tree.add(ip)
-        self.leafs_removed.extend([x.network for x in tree.leafs_removed()])
-        self.leafs_added.extend([x.network for x in tree.leafs_added()])
-        return node
+        hit = tree.add(ip)
+        self.leafs_removed.extend([x.network for x in hit.leafs_removed])
+        self.leafs_added.extend([x.network for x in hit.leafs_added])
+        return hit.node
 
     def test_add_from_one_128(self):
         tree = IPv6Tree()
@@ -135,6 +129,7 @@ class TestIPTree(object):
 
         children = [x.network for x in tree.root]
         assert children[0] == '2001:db8::/112'
+        assert '2001:db8::/112' in self.leafs_added
 
         assert tree.root.hit_count == 300
         assert tree.root.leaf_count == 1
@@ -149,6 +144,7 @@ class TestIPTree(object):
 
         children = [x.network for x in tree.root]
         assert children[0] == '2001:db8::1:0/112'
+        assert '2001:db8::1:0/112' in self.leafs_added
 
         assert tree.root.hit_count == 100
         assert tree.root.leaf_count == 1
@@ -169,6 +165,7 @@ class TestIPTree(object):
 
         children = [x.network for x in tree.root]
         assert '2001:db8::/96' in children
+        assert '2001:db8::/96' in self.leafs_added
 
         assert tree.root.hit_count == 200
         assert tree.root.leaf_count == 1
@@ -187,6 +184,8 @@ class TestIPTree(object):
         children = [x.network for x in tree.root]
         assert '2001:db8::1:0/112' in children
         assert '2001:db8::2:0/112' in children
+        assert '2001:db8::1:0/112' in self.leafs_added
+        assert '2001:db8::2:0/112' in self.leafs_added
 
         assert tree.root.hit_count == 200
         assert tree.root.leaf_count == 2
@@ -201,6 +200,7 @@ class TestIPTree(object):
 
         children = [x.network for x in tree.root]
         assert children[0] == '2001:db8::/96'
+        assert '2001:db8::/96' in self.leafs_added
 
         assert tree.root.hit_count == 300
         assert tree.root.leaf_count == 1
@@ -215,6 +215,7 @@ class TestIPTree(object):
 
         children = [x.network for x in tree.root]
         assert children[0] == '2001:db8:0:1::/64'
+        assert '2001:db8:0:1::/64' in self.leafs_added
 
         assert tree.root.hit_count == 100
         assert tree.root.leaf_count == 1
@@ -235,6 +236,7 @@ class TestIPTree(object):
 
         children = [x.network for x in tree.root]
         assert '2001:db8::/56' in children
+        assert '2001:db8::/56' in self.leafs_added
 
         assert tree.root.hit_count == 1000
         assert tree.root.leaf_count == 1
@@ -251,6 +253,7 @@ class TestIPTree(object):
         children = [x.network for x in tree.root]
         for idx in range(1, prefixes + 1):
             assert '2001:db8:0:{}::/64'.format(idx) in children
+            assert '2001:db8:0:{}::/64'.format(idx) in self.leafs_added
 
         assert tree.root.hit_count == 600
         assert tree.root.leaf_count == 6
@@ -283,6 +286,7 @@ class TestIPTree(object):
 
         children = [x.network for x in tree.root]
         assert '2001:db8::/56' in children
+        assert '2001:db8::/56' in self.leafs_added
 
         assert tree.root.hit_count == 700
         assert tree.root.leaf_count == 1
@@ -300,6 +304,7 @@ class TestIPTree(object):
 
         children = [x.network for x in tree.root]
         assert '2001:db8:1::/48' in children
+        assert '2001:db8:1::/48' in self.leafs_added
 
         assert tree.root.hit_count == 100
         assert tree.root.leaf_count == 1

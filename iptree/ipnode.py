@@ -23,6 +23,9 @@ class IPNode(object):
         else:
             yield self
 
+    def __repr__(self):
+        return '<{}: {}>'.format(self.__class__.__name__, self.network)
+
     def add(self, node):
         node.parent = self
         self.children[node.network] = node
