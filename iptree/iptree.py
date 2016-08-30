@@ -84,6 +84,9 @@ class BaseTree(object):
 
         self.aggregate_user_data = aggregate_user_data
 
+    def __getitem__(self, network):
+        return self.find_node(network)
+
     def new_user_data(self):
         if not self._initial_user_data:
             return None
@@ -98,7 +101,11 @@ class BaseTree(object):
 
     def find_node(self, address):
         node = self.root
-        for net in self._networks(address):
+        if '/' in address:
+            without_prefix, prefix = address.split('/')
+        else:
+            without_prefix = address
+        for net in self._networks(without_prefix):
             if node.aggregated or node.network == address:
                 break
 
@@ -159,7 +166,7 @@ class BaseTree(object):
             node = self.create_node(address)
             new_leaf = True
 
-        self._hit(node)
+        self._update_hit_count(node, 1)
 
         leafs_added = []
         aggregated_node, leafs_removed = self._aggregate_if_needed(node)
@@ -193,10 +200,15 @@ class BaseTree(object):
             raise RemoveRootException("Can't remove root node")
 
         del node.parent.children[node.network]
+        self._update_hit_count(node.parent, -node.hit_count)
+        self._update_leaf_count(node.parent, -1)
 
-    def _hit(self, node):
+        if not node.parent.children and node.parent.parent:
+            self.remove(node.parent)
+
+    def _update_hit_count(self, node, increment):
         while node:
-            node.hit_count += 1
+            node.hit_count += increment
             node = node.parent
 
     def _update_leaf_count(self, node, increment):
@@ -280,6 +292,12 @@ class IPTree(object):
         super(IPTree, self).__init__()
         self.ipv4 = IPv4Tree(*args, **kwargs)
         self.ipv6 = IPv6Tree(*args, **kwargs)
+
+    def __getitem__(self, network):
+        return self._tree_by_network(network)[network]
+
+    def __delitem__(self, network):
+        self.remove(self._tree_by_network(network)[network])
 
     def _tree_by_network(self, network):
         if ':' in network:

@@ -153,6 +153,41 @@ class TestRemove(unittest.TestCase):
 
         assert len([x for x in tree.leafs()]) == 2
 
+    def test_hit_count(self):
+        tree = IPTree()
+
+        for x in range(10):
+            hit = tree.add('2001:db8:cafe::1')
+
+        assert tree.ipv6.root.hit_count == 10
+
+        tree.remove(hit.node)
+
+        assert tree.ipv6.root.hit_count == 0
+
+    def test_non_leafs_removed(self):
+        tree = IPTree()
+
+        hit = tree.add('2001:db8:cafe::1')
+
+        tree.remove(hit.node)
+
+        leafs = list(tree.ipv6.leafs())
+        assert len(leafs) == 1
+        assert leafs[0].network == '::/0'
+
+    def test_non_leafs_not_removed(self):
+        tree = IPTree()
+
+        tree.add('2001:db8:cafe::1')
+        hit = tree.add('2001:db8:cafe::2')
+
+        tree.remove(hit.node)
+
+        leafs = list(tree.ipv6.leafs())
+        assert len(leafs) == 1
+        assert leafs[0].network == '2001:db8:cafe::1/128'
+
 
 class TestInitial(unittest.TestCase):
     def test_initial_data(self):

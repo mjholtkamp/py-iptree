@@ -2,12 +2,12 @@
 IP tree: efficiently counting IP addresses.
 =======
 
-``iptree`` is the package to count hits to IP addresses, both IPv4 as well as IPv6.
-A use case for this is to keep track of IP addresses to throttle without overloading
-your memory or overloading your firewall with millions of rules.
+``iptree`` is the package to count hits to IP addresses, both IPv4 as well as
+IPv6. A use case for this is to keep track of IP addresses to throttle without
+overloading your memory or overloading your firewall with millions of rules.
 
-For efficiency, IP addresses or subnets are automatically aggregated into larger
-subnets based on configurable thresholds.
+For efficiency, IP addresses or subnets are automatically aggregated into
+larger subnets based on configurable thresholds.
 
 .. examples-begin
 
@@ -43,7 +43,7 @@ Let's add some IP addresses to the tree:
     [<IPNode: ::/0>, <IPNode: 192.0.2.1/32>]
 
 Aggregation
-===========
+-----------
 
 Now let's see what happens when multiple IP addresses are added:
 
@@ -64,7 +64,45 @@ Now let's see what happens when multiple IP addresses are added:
     ((32, 0), (48, 50), (56, 10), (64, 5), (80, 4), (96, 3), (112, 2), (128, 0))
 
 
-As we can see from the default ``prefix_limits``, there are only 2 unique IP addresses
-allowed per /112 subnet, so the third address triggered an aggregation of multiple /128
-subnets into one /112 subnet, while the hit\_count is preserved.
+As we can see from the default ``prefix_limits``, there are only 2 unique IP
+addresses allowed per /112 subnet, so the third address triggered an
+aggregation of multiple /128 subnets into one /112 subnet, while the
+hit\_count is preserved.
+
+Finding
+-------
+
+Finding nodes by address is pretty straightforward. An ``IPTree`` will return
+an IPNode (possibly aggregated) if it finds a node by address, otherwise an
+exception is raised.
+
+.. code::python
+
+    >>> tree['2001:db8::42']
+    <IPNode: 2001:db8::/112>
+    >>> tree['2001:db8::/112']
+    <IPNode: 2001:db8::/112>
+    >>> tree['2001:db8:cafe::42']
+    Traceback (most recent call last):
+      File "<stdin>", line 1, in <module>
+      File "iptree/iptree.py", line 293, in __getitem__
+        return self._tree_by_network(network)[network]
+      File "iptree/iptree.py", line 88, in __getitem__
+        return self.find_node(network)
+      File "iptree/iptree.py", line 111, in find_node
+        raise NodeNotFound
+    iptree.iptree.NodeNotFound
+
+Removing
+--------
+
+Removing can be done on address or network with prefix, provided that the
+address or network/prefix exists in the tree:
+
+.. code::python
+
+    >>> del tree['2001:db8::/112']
+    >>> del tree['127.0.0.1']
+    >>> list(tree.leafs())
+    [<IPNode: ::/0>, <IPNode: 0.0.0.0/0>]
 
