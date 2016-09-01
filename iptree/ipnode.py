@@ -20,7 +20,7 @@ class IPNode(object):
             for child in self.children.values():
                 for grandchild in iter(child):
                     yield grandchild
-        else:
+        elif self.parent:
             yield self
 
     def __repr__(self):

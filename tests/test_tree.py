@@ -32,9 +32,6 @@ class TestIPTree(unittest.TestCase):
     def test_tree(self):
         tree = IPTree()
 
-        assert '0.0.0.0/0' in [x.network for x in tree.leafs()]
-        assert '::/0' in [x.network for x in tree.leafs()]
-
         tree.add('127.0.0.1')
         tree.add('2001:db8::1')
 
@@ -101,26 +98,25 @@ class TestRemove(unittest.TestCase):
         assert hit.node.network == '2001:db8:cafe::2/128'
 
         leafs = [x.network for x in tree.leafs()]
-        assert len(leafs) == 3
+        assert len(leafs) == 2
 
         tree.remove(hit.node)
 
         leafs = [x.network for x in tree.leafs()]
-        assert len(leafs) == 2
+        assert len(leafs) == 1
         assert '2001:db8:cafe::1/128' in leafs
 
     def test_tree_remove_root(self):
         tree = IPTree()
 
         leafs = [x for x in tree.leafs()]
-        assert len(leafs) == 2
-
-        # both IPv4 and IPv6 are root nodes (as well as leaves)
-        with pytest.raises(RemoveRootException):
-            tree.remove(leafs[0])
+        assert len(leafs) == 0
 
         with pytest.raises(RemoveRootException):
-            tree.remove(leafs[1])
+            tree.remove(tree.ipv6.root)
+
+        with pytest.raises(RemoveRootException):
+            tree.remove(tree.ipv4.root)
 
     def test_tree_remove_non_leaf(self):
         """Test if non leafs can't be removed.
@@ -139,19 +135,17 @@ class TestRemove(unittest.TestCase):
         """
         tree = IPTree()
 
-        # two leafs; one for IPv4, one for IPv6
-        assert len([x for x in tree.leafs()]) == 2
+        assert len([x for x in tree.leafs()]) == 0
 
         tree.add('2001:db8:cafe::1')
 
-        # still to leafs, the IPv6 one is not '::/0' anymore
-        assert len([x for x in tree.leafs()]) == 2
+        assert len([x for x in tree.leafs()]) == 1
 
         with pytest.raises(RemoveNonLeafException):
             # 2001:db8::/32 is not a leaf
             tree.remove(tree.ipv6.root.children['2001:db8::/32'])
 
-        assert len([x for x in tree.leafs()]) == 2
+        assert len([x for x in tree.leafs()]) == 1
 
     def test_hit_count(self):
         tree = IPTree()
@@ -173,8 +167,7 @@ class TestRemove(unittest.TestCase):
         tree.remove(hit.node)
 
         leafs = list(tree.ipv6.leafs())
-        assert len(leafs) == 1
-        assert leafs[0].network == '::/0'
+        assert len(leafs) == 0
 
     def test_non_leafs_not_removed(self):
         tree = IPTree()
