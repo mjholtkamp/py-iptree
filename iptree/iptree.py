@@ -21,6 +21,15 @@ class NodeNotFound(Exception):
 
 
 Hit = namedtuple('Hit', ['node', 'leafs_removed', 'leafs_added'])
+UserMethods = namedtuple('UserMethods', ['initial', 'add', 'aggregate'])
+
+
+def default_initial_user_data():
+    return None
+
+
+def default_add_user_data(node):
+    pass
 
 
 def default_aggregate_user_data(into, from_):
@@ -35,9 +44,8 @@ class BaseTree(object):
     net_all = None
     prefix_limits = None
 
-    def __init__(
-            self, net_all=None, prefix_limits=None, aggregate_user_data=None,
-            initial_user_data=None, *args, **kwargs):
+    def __init__(self, net_all=None, prefix_limits=None, user_methods=None,
+                 *args, **kwargs):
         """Tree of IPNode objects.
         The Tree uses prefix length to group ip address in (tree) nodes. To
         prevent out-of-memory errors, nodes are automatically aggregated once
@@ -76,22 +84,21 @@ class BaseTree(object):
             self.net_all = net_all
         if prefix_limits:
             self.prefix_limits = prefix_limits
-        self._initial_user_data = initial_user_data
-        self.root = IPNode(self.net_all, data=self.new_user_data())
 
-        if not aggregate_user_data:
-            aggregate_user_data = default_aggregate_user_data
+        if user_methods is None:
+            user_methods = {}
 
-        self.aggregate_user_data = aggregate_user_data
+        aggregate = user_methods.get('aggregate', default_aggregate_user_data)
+        self.user_methods = UserMethods(
+            initial=user_methods.get('initial', default_initial_user_data),
+            add=user_methods.get('add', default_add_user_data),
+            aggregate=aggregate,
+        )
+
+        self.root = IPNode(self.net_all, data=self.user_methods.initial())
 
     def __getitem__(self, network):
         return self.find_node(network)
-
-    def new_user_data(self):
-        if not self._initial_user_data:
-            return None
-
-        return self._initial_user_data.copy()
 
     def _networks(self, address):
         """Generate networks for each of the prefixes, specific to address"""
@@ -129,7 +136,7 @@ class BaseTree(object):
                 node = node[net]
             except KeyError:
                 new_leaf = True
-                new_node = IPNode(net, data=self.new_user_data())
+                new_node = IPNode(net, data=self.user_methods.initial())
                 node.add(new_node)
                 node = new_node
                 logger.info('added node: {}'.format(node.network))
@@ -165,6 +172,8 @@ class BaseTree(object):
         except NodeNotFound:
             node = self.create_node(address)
             new_leaf = True
+        else:
+            self.user_methods.add(node)
 
         self._update_hit_count(node, 1)
 
@@ -251,7 +260,7 @@ class BaseTree(object):
                     leafs_removed.append(leaf)
                     logger.info('node removed: {}'.format(leaf.network))
 
-                self.aggregate_user_data(parent, leafs_removed)
+                self.user_methods.aggregate(parent, leafs_removed)
                 total_leafs_removed.extend(leafs_removed)
 
                 # Update leaf count. We removed N leafs,

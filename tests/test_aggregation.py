@@ -317,11 +317,11 @@ class TestIPTree(object):
             of the aggregate function. It simply sums up all counters."""
             into.data['counter'] += sum([x.data['counter'] for x in from_])
 
-        kwargs = dict(
-            aggregate_user_data=aggregate_user_data,
-            initial_user_data={'counter': 0},
+        methods = dict(
+            initial=lambda: {'counter': 0},
+            aggregate=aggregate_user_data,
         )
-        tree = IPv6Tree(**kwargs)
+        tree = IPv6Tree(user_methods=methods)
         for prefix in self.generate_addresses(112, 100, 1):
             for ip in prefix:
                 node = self.add_ip(tree, ip)

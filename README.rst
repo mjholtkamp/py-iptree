@@ -1,6 +1,6 @@
-=======
+===========================================
 IP tree: efficiently counting IP addresses.
-=======
+===========================================
 
 ``iptree`` is the package to count hits to IP addresses, both IPv4 as well as
 IPv6. A use case for this is to keep track of IP addresses to throttle without
@@ -23,7 +23,7 @@ always use them directly, e.g.: ``iptree.IPv6Tree()`` for the IPv6 version.
     >>> import iptree
     >>> tree = iptree.IPTree()
     >>> list(tree.leafs())
-    [<IPNode: ::/0>, <IPNode: 0.0.0.0/0>]
+    []
 
 Let's add some IP addresses to the tree:
 
@@ -40,7 +40,7 @@ Let's add some IP addresses to the tree:
     >>> hit.node.hit_count
     2
     >>> list(tree.leafs())
-    [<IPNode: ::/0>, <IPNode: 192.0.2.1/32>]
+    [<IPNode: 192.0.2.1/32>]
 
 Aggregation
 -----------
@@ -102,7 +102,54 @@ address or network/prefix exists in the tree:
 .. code::python
 
     >>> del tree['2001:db8::/112']
-    >>> del tree['127.0.0.1']
+    >>> del tree['192.0.2.1']
     >>> list(tree.leafs())
-    [<IPNode: ::/0>, <IPNode: 0.0.0.0/0>]
+    []
+
+Advanced usage
+==============
+
+It is possible to add custom data on nodes and have them automatically
+mutated in three situations:
+
+1. When a node is created (initial)
+2. When a hit is added to a node (add)
+3. When multiple nodes are aggregated into one (aggregate)
+
+The following example shows how this works. The example is a bit silly since
+hits are already counted by iptree, but the aggregating function selects the
+max of the counters of all nodes that are aggregated instead.
+
+    >>> def initial():
+    ...     return {'counter': 1}
+    ...
+    >>> def add(node):
+    ...     node.data['counter'] += 1
+    ...
+    >>> def aggregate(into, from_):
+    ...     into.data['counter'] = max([node.data['counter'] for node in from_])
+    ...
+    >>> methods = dict(
+    ...     initial=initial,
+    ...     add=add,
+    ...     aggregate=aggregate,
+    ... )
+    >>> tree = iptree.IPTree(user_data_methods=methods)
+    >>> hit = tree.add('2001:db8::1')
+    >>> hit.node.data
+    {'counter': 1}  # node is created, so 'initial()' is called
+    >>> hit = tree.add('2001:db8::1')
+    >>> hit.node.data
+    {'counter': 2}  # same node, so 'add()' is called
+    >>> hit = tree.add('2001:db8::2')
+    >>> hit.node.aggregated
+    False
+    >>> hit.node.data
+    {'counter': 1}
+    >>> hit = tree.add('2001:db8::3')
+    >>> hit.node.aggregated
+    True
+    >>> hit.node.data
+    {'counter': 2}  # because the prefix limit was passed, 'aggregated()' is called
+
 

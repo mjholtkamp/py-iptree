@@ -182,14 +182,54 @@ class TestRemove(unittest.TestCase):
         assert leafs[0].network == '2001:db8:cafe::1/128'
 
 
-class TestInitial(unittest.TestCase):
+class TestUserData(unittest.TestCase):
     def test_initial_data(self):
-        tree = IPTree(initial_user_data={'initial': 'd'})
+        methods = dict(
+            initial=lambda: {'initial': 'd'}
+        )
+        tree = IPTree(user_methods=methods)
         assert tree.ipv4.root.data['initial'] == 'd'
         assert tree.ipv6.root.data['initial'] == 'd'
         tree.ipv6.root.data['initial'] = 'data'
         assert tree.ipv6.root.data['initial'] == 'data'
 
-        # make sure changing one, will not affect new nodes
+        # make sure changing one will not affect new nodes
         hit = tree.add('2001:db8::1')
         assert hit.node.data['initial'] == 'd'
+
+    def test_add(self):
+        def add(node):
+            node.data['counter'] += 1
+
+        methods = dict(
+            initial=lambda: {'counter': 0},
+            add=add,
+        )
+        tree = IPTree(user_methods=methods)
+
+        hit = tree.add('127.0.0.1')
+        assert hit.node.data['counter'] == 0
+        hit = tree.add('127.0.0.1')
+        assert hit.node.data['counter'] == 1
+        hit = tree.add('127.0.0.1')
+        hit = tree.add('127.0.0.1')
+        hit = tree.add('127.0.0.1')
+        assert hit.node.data['counter'] == 4
+
+    def test_aggregate(self):
+        def aggregate(into, from_):
+            into.data['number'] = max([x.data['number'] for x in from_])
+
+        methods = dict(
+            initial=lambda: {'number': 0},
+            aggregate=aggregate,
+        )
+        tree = IPTree(user_methods=methods)
+
+        hit = tree.add('2001:db8::1')
+        hit.node.data['number'] = 24
+        hit = tree.add('2001:db8::2')
+        hit.node.data['number'] = 42
+        hit = tree.add('2001:db8::3')
+        assert hit.node.network == '2001:db8::/112'
+        assert hit.node.data['number'] == 42
