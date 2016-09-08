@@ -18,7 +18,7 @@ Let's start with some basic example. We create an IPtree object that will work
 for both IPv4 as well as IPv6 addresses. If you only want one of them, you can
 always use them directly, e.g.: ``iptree.IPv6Tree()`` for the IPv6 version.
 
-.. code::python
+.. code:: python
 
     >>> import iptree
     >>> tree = iptree.IPTree()
@@ -27,7 +27,7 @@ always use them directly, e.g.: ``iptree.IPv6Tree()`` for the IPv6 version.
 
 Let's add some IP addresses to the tree:
 
-.. code::python
+.. code:: python
 
     >>> hit = tree.add('192.0.2.1')
     >>> hit
@@ -47,7 +47,7 @@ Aggregation
 
 Now let's see what happens when multiple IP addresses are added:
 
-.. code::python
+.. code:: python
 
     >>> tree.add('2001:db8::1')
     Hit(node=<IPNode: 2001:db8::1/128>, leafs_removed=[], leafs_added=[<IPNode: 2001:db8::1/128>])
@@ -76,7 +76,7 @@ Finding nodes by address is pretty straightforward. An ``IPTree`` will return
 an IPNode (possibly aggregated) if it finds a node by address, otherwise an
 exception is raised.
 
-.. code::python
+.. code:: python
 
     >>> tree['2001:db8::42']
     <IPNode: 2001:db8::/112>
@@ -99,7 +99,7 @@ Removing
 Removing can be done on address or network with prefix, provided that the
 address or network/prefix exists in the tree:
 
-.. code::python
+.. code:: python
 
     >>> del tree['2001:db8::/112']
     >>> del tree['192.0.2.1']
@@ -119,6 +119,8 @@ mutated in three situations:
 The following example shows how this works. The example is a bit silly since
 hits are already counted by iptree, but the aggregating function selects the
 max of the counters of all nodes that are aggregated instead.
+
+.. code:: python
 
     >>> def initial():
     ...     return {'counter': 1}
